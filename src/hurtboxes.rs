@@ -1,6 +1,8 @@
 use std::str::FromStr;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use nalgebra::{Unit, Vector3};
+use nalgebra::geometry::{UnitQuaternion, Isometry3, Translation3};
 
 #[derive(Debug)]
 pub enum HurtboxType {
@@ -11,16 +13,16 @@ pub enum HurtboxType {
 
 #[derive(Debug)]
 pub struct Hurtbox {
-    bone_index: i32,
-    x1: f32,
-    y1: f32,
-    z1: f32,
-    x2: f32,
-    y2: f32,
-    z2: f32,
-    size: f32,
-    r#type: HurtboxType,
-    grabable: bool,
+    pub bone_index: i32,
+    pub x1: f32,
+    pub y1: f32,
+    pub z1: f32,
+    pub x2: f32,
+    pub y2: f32,
+    pub z2: f32,
+    pub size: f32,
+    pub r#type: HurtboxType,
+    pub grabable: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +60,39 @@ impl Hurtbox {
             "High" => Ok(HurtboxType::High),
             _ => Err(ParseHurtboxError),
         }
+    }
+    pub fn norm(&self) -> f32 {
+        ((self.x1 - self.x2).powi(2) + (self.y1 - self.y2).powi(2) + (self.z1 - self.z2).powi(2)).sqrt()
+    }
+
+    pub fn p1(&self) -> Translation3<f32> {
+        Translation3::new(self.x1, self.y1, self.z1)
+    }
+
+    pub fn p2(&self) -> Translation3<f32> {
+        Translation3::new(self.x2, self.y2, self.z2)
+    }
+
+    pub fn center(&self) -> Translation3<f32> {
+        Translation3::new(0.5 * (self.x1 + self.x2), 0.5 * (self.y1 + self.y2), 0.5 * (self.z1 + self.z2))
+    }
+
+    pub fn rotation(&self) -> UnitQuaternion<f32> {
+        if self.norm() > 0. {
+            let dir = Vector3::new(self.x2 - self.x1, self.y2 - self.y1, self.z2 - self.z1);
+            if dir.x == 0. && dir.z == 0. {
+                return UnitQuaternion::identity();
+            } else {
+                let axis: Unit<Vector3<f32>> = Unit::new_normalize(Vector3::y_axis().cross(&dir));
+                let angle = Vector3::y_axis().dot(&dir).acos();
+                return UnitQuaternion::from_axis_angle(&axis, angle);
+            }
+        }
+        UnitQuaternion::identity()
+    }
+
+    pub fn transform(&self) -> Isometry3<f32> {
+        Isometry3::from_parts(self.center(), self.rotation())
     }
 }
 

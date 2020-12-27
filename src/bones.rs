@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::collections::BTreeMap;
-use nalgebra::Matrix4;
+use nalgebra::geometry::{UnitQuaternion, Translation3, Isometry3};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Joint {
@@ -21,7 +21,7 @@ pub struct Bone {
     pub childs: Vec<i32>,
     pub name: String,
     pub joint: Joint,
-    pub transform: Option<Matrix4<f32>>,
+    pub transform: Option<Isometry3<f32>>,
 }
 
 #[derive(Debug)]
@@ -122,24 +122,37 @@ impl Bone {
         }
     }
 
-    pub fn transformation_matrix(&self) -> Matrix4<f32> {
-        let mut translation_matrix = Matrix4::<f32>::identity();
-        translation_matrix.m41 = self.joint.tx;
-        translation_matrix.m42 = self.joint.ty;
-        translation_matrix.m43 = self.joint.tz;
-
-        let rotation_matrix = Matrix4::from_euler_angles(self.joint.rx, self.joint.ry, self.joint.rz);
-        rotation_matrix * translation_matrix
+    pub fn local_transform(&self) -> Isometry3<f32> {
+        Isometry3::from_parts(self.local_translation(), self.local_rotation())
     }
 
-    pub fn xyz(&self) -> (f32, f32, f32) {
-        let (mut x, mut y, mut z): (f32, f32, f32) = (0., 0., 0.);
-        if let Some(transform) = self.transform {
-            x = transform.m41;
-            y = transform.m42;
-            z = transform.m43;
+    pub fn local_translation(&self) -> Translation3<f32> {
+        Translation3::new(self.joint.tx, self.joint.ty, self.joint.tz)
+    }
+
+    pub fn local_rotation(&self) -> UnitQuaternion<f32> {
+        UnitQuaternion::from_euler_angles(self.joint.rx, self.joint.ry, self.joint.rz)
+    }
+
+    pub fn transform(&self) -> Isometry3<f32> {
+        match self.transform {
+            Some(transform) => transform,
+            None => Isometry3::identity(),
         }
-        (x, y, z)
+    }
+
+    pub fn translation(&self) -> Translation3<f32> {
+        match self.transform {
+            Some(transform) => transform.translation,
+            None => Translation3::identity(),
+        }
+    }
+
+    pub fn rotation(&self) -> UnitQuaternion<f32> {
+        match self.transform {
+            Some(transform) => transform.rotation,
+            None => UnitQuaternion::identity(),
+        }
     }
 }
 
@@ -221,15 +234,17 @@ impl Model {
 
     pub fn update_transforms(&mut self, bone_index: i32, parent_index: Option<i32>) {
         let bone = &self.bones[self.indexes[&bone_index]];
-        let mut local_transform = bone.transformation_matrix();
+        let mut local_transform = bone.local_transform();
         if let Some(index) = parent_index {
             let parent = &self.bones[self.indexes[&index]];
             if let Some(parent_transform) = parent.transform {
-                local_transform = local_transform * parent_transform;
+                local_transform = parent_transform * local_transform;
             } 
         }
         let mut bone = &mut self.bones[self.indexes[&bone_index]];
         bone.transform = Some(local_transform.clone());
+        // println!("{:?}, {:?}", bone_index, parent_index);
+        // println!("{:?}", bone.transform);
         for child_index in &bone.childs.clone() {
             self.update_transforms(*child_index, Some(bone_index));
         }
