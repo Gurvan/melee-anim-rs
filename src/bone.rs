@@ -1,8 +1,10 @@
 use std::str::FromStr;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Cursor};
 use std::collections::BTreeMap;
 use nalgebra::geometry::{UnitQuaternion, Translation3, Isometry3};
+
+use crate::animation::{Track, TrackType};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Joint {
@@ -22,9 +24,10 @@ pub struct Bone {
     pub name: String,
     pub joint: Joint,
     pub transform: Option<Isometry3<f32>>,
+    pub tracks: Vec<Track>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Model {
     pub bones: Vec<Bone>,
     pub indexes: BTreeMap<i32,usize>,
@@ -119,6 +122,7 @@ impl Bone {
             childs: vec![],
             joint: Joint::new(),
             transform: None,
+            tracks: vec![],
         }
     }
 
@@ -173,17 +177,27 @@ impl FromStr for Bone {
 
 
 impl Model {
-    pub fn from_smd(path: &str) -> Result<Self, ParseSMDError> {
+    pub fn from_smd_path(path: &str) -> Result<Self, ParseSMDError> {
         let file = File::open(&path)?;
         let reader = BufReader::new(file);
+        let lines = reader.lines().collect::<Result<Vec<_>, _>>()?;
+        Self::from_smd(&lines)
+    }
     
+    pub fn from_smd_bytes(bytes: &[u8]) -> Result<Self, ParseSMDError> {
+        let reader = Cursor::new(bytes);
+        let lines = reader.lines().collect::<Result<Vec<_>, _>>()?;
+        Self::from_smd(&lines)
+    }
+    
+    pub fn from_smd(lines: &Vec<String>) -> Result<Self, ParseSMDError> {
         let mut nodes_flag = false;
         let mut skeleton_flag = false;
     
         let mut bones: Vec<Bone> = vec![];
     
-        for line in reader.lines() {
-            let line = line.expect("Unable to read line");
+        for line in lines {
+            let line = &line.trim().to_string();
     
             if line.contains("nodes") {
                 nodes_flag = true;
@@ -251,6 +265,27 @@ impl Model {
     }
 
     pub fn compute_t_pose_transform(&mut self) {
+        self.update_transforms(self.root_bone_index, None);
+    }
+
+    pub fn update_joints(&mut self, frame: f32) {
+        for bone in &mut self.bones {
+            for track in &bone.tracks {
+                match track.r#type {
+                    TrackType::HSD_A_J_ROTX => bone.joint.rx = track.get_value(frame),
+                    TrackType::HSD_A_J_ROTY => bone.joint.ry = track.get_value(frame),
+                    TrackType::HSD_A_J_ROTZ => bone.joint.rz = track.get_value(frame),
+                    TrackType::HSD_A_J_TRAX => bone.joint.tx = track.get_value(frame),
+                    TrackType::HSD_A_J_TRAY => bone.joint.ty = track.get_value(frame),
+                    TrackType::HSD_A_J_TRAZ => bone.joint.tz = track.get_value(frame),
+                    _ => (),
+                }
+            }
+        }
+    }
+
+    pub fn compute_frame_transform(&mut self, frame:f32) {
+        self.update_joints(frame);
         self.update_transforms(self.root_bone_index, None);
     }
 }

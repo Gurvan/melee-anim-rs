@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Cursor};
 use nalgebra::{Unit, Vector3};
 use nalgebra::geometry::{UnitQuaternion, Isometry3, Translation3};
 
@@ -116,21 +116,25 @@ impl FromStr for Hurtbox {
     }
 }
 
-pub fn parse_hurtboxes(path: &str) -> Result<Vec<Hurtbox>, ParseHurtboxError> {
+pub fn parse_hurtboxes_from_path(path: &str) -> Result<Vec<Hurtbox>, ParseHurtboxError> {
     let file = File::open(&path)?;
     let reader = BufReader::new(file);
+    let lines = reader.lines().collect::<Result<Vec<_>, _>>()?;
+    parse_hurtboxes(&lines)
+}
 
+pub fn parse_hurtboxes_from_bytes(bytes: &[u8]) -> Result<Vec<Hurtbox>, ParseHurtboxError> {
+    let reader = Cursor::new(bytes);
+    let lines = reader.lines().collect::<Result<Vec<_>, _>>()?;
+    parse_hurtboxes(&lines)
+}
+
+pub fn parse_hurtboxes(lines: &Vec<String>) -> Result<Vec<Hurtbox>, ParseHurtboxError> {
     let mut hurtboxes: Vec<Hurtbox> = vec![];
-
-    for line in reader.lines() {
-        let line = line.expect("Unable to read line");
-
+    for line in lines {
         match Hurtbox::from_str(&line) {
             Ok(hurtbox) => &hurtboxes.push(hurtbox),
-            Err(e) => {
-                println!("{:?}", e);
-                &()
-            }
+            Err(_) => &(),
         };
     }
     Ok(hurtboxes)
