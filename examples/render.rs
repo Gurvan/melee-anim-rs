@@ -2,8 +2,6 @@ use ggez::{graphics, Context, ContextBuilder, GameResult};
 use ggez::mint::Point2;
 use ggez::event::{self, EventHandler};
 
-
-use melee_anim_rs::bone::Model;
 use melee_anim_rs::animation::Animation;
 
 
@@ -65,7 +63,6 @@ fn main() -> GameResult {
 struct MyGame {
     anim: Animation,
     frame: i32,
-    model: Model,
 }
 
 impl MyGame {
@@ -75,11 +72,9 @@ impl MyGame {
         let figatree_data: &[u8] = include_bytes!(concat!("assets", PATH_SEPARATOR!(), "animation.figatree"));
 
         let anim = melee_anim_rs::get_animation_with_hurtboxes(smd_data, hurtbox_data, figatree_data).unwrap();
-        let model = anim.model.clone();
         MyGame {
             anim,
             frame: 0,
-            model,
         }
     }
 }
@@ -91,7 +86,7 @@ impl EventHandler for MyGame {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-        let slow = 5.;
+        let slow = 1.;
         if self.frame >= (slow * self.anim.frame_count) as i32 {
             self.frame -= (slow * self.anim.frame_count) as i32;
         }
